@@ -593,27 +593,35 @@ export default function Home() {
               </div>
             </GlassCard>
 
-            {/* 버튼 */}
-            <div className="flex flex-wrap gap-3">
-              <button onClick={handleCheck} disabled={loading} className={btnBase}>
-                {loading ? "분석 중..." : <><Search size={14} />분석하기</>}
-              </button>
-              {prevFeedback && !loading && (
-                <button onClick={handleRecheck} disabled={loading} className={btnBase}>
-                  <RotateCcw size={14} />피드백 반영 재분석
-                </button>
-              )}
-              {fromCache && !loading && (
-                <button onClick={handleForceCheck} className={btnBase}>
-                  <RotateCcw size={14} />새로 분석
-                </button>
-              )}
-            </div>
+            {/* 분석하기 — 메인 CTA */}
+            <button
+              onClick={handleCheck}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl
+                bg-slate-800 hover:bg-slate-700 active:scale-[0.98]
+                text-white text-sm font-medium
+                shadow-[0_4px_24px_rgba(0,0,0,0.15)]
+                transition-all duration-200 disabled:opacity-50"
+            >
+              {loading
+                ? <><div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />{step}</>
+                : <><Search size={15} />PRD 분석하기</>
+              }
+            </button>
 
-            {loading && (
-              <div className="flex items-center gap-3 text-slate-500 text-sm">
-                <div className="w-5 h-5 border-2 border-white/10 border-t-slate-500 rounded-full animate-spin" />
-                <span>{step}</span>
+            {/* 보조 버튼 */}
+            {!loading && (prevFeedback || fromCache) && (
+              <div className="flex gap-2">
+                {prevFeedback && (
+                  <button onClick={handleRecheck} className={`${btnBase} flex-1 justify-center`}>
+                    <RotateCcw size={13} />피드백 반영 재분석
+                  </button>
+                )}
+                {fromCache && (
+                  <button onClick={handleForceCheck} className={`${btnBase} flex-1 justify-center`}>
+                    <RotateCcw size={13} />새로 분석
+                  </button>
+                )}
               </div>
             )}
           </div>
