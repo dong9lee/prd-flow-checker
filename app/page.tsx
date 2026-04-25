@@ -76,13 +76,46 @@ type Project = {
 const REQUIRED_SECTION_KEYS = ["problem", "segment", "hypothesis", "kpi", "feature"] as const;
 
 const SECTION_META = [
-  { key: "problem",     label: "문제 정의",      optional: false, placeholder: "사용자가 겪는 문제의 근본 원인은 무엇인가요?\n(증상이 아닌 원인 수준으로 작성하세요)" },
-  { key: "segment",    label: "사용자 세그먼트",  optional: false, placeholder: "이 문제를 가장 크게 겪는 구체적인 사용자 그룹은 누구인가요?" },
-  { key: "hypothesis", label: "가설",            optional: false, placeholder: "이 기능을 제공하면 사용자의 어떤 행동이 어떻게 변화할 것이라고 예상하나요?" },
-  { key: "kpi",        label: "KPI",             optional: false, placeholder: "가설이 맞다면 어떤 지표가 어느 방향으로 얼마나 변화할 것으로 예상하나요?" },
-  { key: "feature",    label: "기능",             optional: false, placeholder: "문제 원인을 제거하기 위한 구체적인 기능과 그 메커니즘을 설명하세요." },
-  { key: "experiment", label: "실험 설계",        optional: true,  placeholder: "A/B 테스트 설계, 실험군/대조군 구성, 샘플 사이즈 등을 설명하세요." },
-  { key: "timeline",   label: "기간",             optional: true,  placeholder: "개발 일정, 실험 기간, 단계별 마일스톤을 입력하세요." },
+  {
+    key: "problem", label: "문제 정의", optional: false,
+    placeholder: "사용자가 겪는 문제의 근본 원인은 무엇인가요?\n(증상이 아닌 원인 수준으로 작성하세요)",
+    bad:  "앱 사용자가 불편함을 느낀다",
+    good: "결제 단계 이탈률 68% — 인터뷰 결과 주소 입력 friction이 원인으로 특정됨",
+  },
+  {
+    key: "segment", label: "사용자 세그먼트", optional: false,
+    placeholder: "이 문제를 가장 크게 겪는 구체적인 사용자 그룹은 누구인가요?",
+    bad:  "우리 서비스를 이용하는 사용자",
+    good: "월 1회 이상 구매 시도하지만 결제 전 이탈하는 2030 여성 신규 가입자",
+  },
+  {
+    key: "hypothesis", label: "가설", optional: false,
+    placeholder: "이 기능을 제공하면 사용자의 어떤 행동이 어떻게 변화할 것이라고 예상하나요?",
+    bad:  "원클릭 결제 기능을 추가한다",
+    good: "원클릭 결제를 제공하면 소요 시간이 줄어 결제 완료율이 높아질 것이다",
+  },
+  {
+    key: "kpi", label: "KPI", optional: false,
+    placeholder: "가설이 맞다면 어떤 지표가 어느 방향으로 얼마나 변화할 것으로 예상하나요?",
+    bad:  "매출이 증가한다",
+    good: "결제 단계 소요시간: 현재 2분 40초 → 목표 40초 이하",
+  },
+  {
+    key: "feature", label: "기능", optional: false,
+    placeholder: "문제 원인을 제거하기 위한 구체적인 기능과 그 메커니즘을 설명하세요.",
+    bad:  "간편결제 기능 개발",
+    good: "저장된 배송지·결제수단으로 단일 탭 구매 완료 → 입력 friction 제거",
+  },
+  {
+    key: "experiment", label: "실험 설계", optional: true,
+    placeholder: "A/B 테스트 설계, 실험군/대조군 구성, 샘플 사이즈 등을 설명하세요.",
+    bad: "", good: "",
+  },
+  {
+    key: "timeline", label: "기간", optional: true,
+    placeholder: "개발 일정, 실험 기간, 단계별 마일스톤을 입력하세요.",
+    bad: "", good: "",
+  },
 ] as const;
 
 const EMPTY_SECTIONS: Sections = {
@@ -298,10 +331,17 @@ export default function Home() {
       analysisCache.current.set(cacheKey, data);
       setPrevFeedback(data.improvements ?? null);
       setAiResult(data);
-      const score = Math.round(
-        (data.problem_score + data.hypothesis_score + data.kpi_score +
-          data.feature_score + data.structural_depth_score) / 5
-      );
+      const calcS = (items?: ChecklistItem[]) => {
+        if (!items || items.length === 0) return 0;
+        return Math.round((items.filter(i => i.met).length / items.length) * 10);
+      };
+      const score = Math.round((
+        calcS(data.checklist?.problem?.items) +
+        calcS(data.checklist?.hypothesis?.items) +
+        calcS(data.checklist?.kpi?.items) +
+        calcS(data.checklist?.feature?.items) +
+        calcS(data.checklist?.structural?.items)
+      ) / 5);
       const contentChanged = prdText !== lastAnalyzedText.current;
       lastAnalyzedText.current = prdText;
       if (contentChanged || history.length === 0) {
@@ -374,47 +414,61 @@ export default function Home() {
     }
   }, [loading]);
 
-  // ── 점수 계산 ──
-  const totalScore = aiResult
-    ? Math.round(
-        (aiResult.problem_score + aiResult.hypothesis_score + aiResult.kpi_score +
-          aiResult.feature_score + aiResult.structural_depth_score) / 5
-      )
+  // ── 점수 계산 (체크리스트 기반, 프론트에서 직접 계산) ──
+  const calcScore = (items?: ChecklistItem[]) => {
+    if (!items || items.length === 0) return 0;
+    return Math.round((items.filter(i => i.met).length / items.length) * 10);
+  };
+
+  const scores = aiResult ? {
+    problem:    calcScore(aiResult.checklist?.problem?.items),
+    hypothesis: calcScore(aiResult.checklist?.hypothesis?.items),
+    kpi:        calcScore(aiResult.checklist?.kpi?.items),
+    feature:    calcScore(aiResult.checklist?.feature?.items),
+    structural: calcScore(aiResult.checklist?.structural?.items),
+  } : null;
+
+  const totalScore = scores
+    ? Math.round((scores.problem + scores.hypothesis + scores.kpi + scores.feature + scores.structural) / 5)
     : null;
 
-  const radarData = aiResult ? [
-    { axis: "문제 정의", value: aiResult.problem_score,          target: targetScore },
-    { axis: "가설",      value: aiResult.hypothesis_score,       target: targetScore },
-    { axis: "KPI",       value: aiResult.kpi_score,              target: targetScore },
-    { axis: "기능",      value: aiResult.feature_score,          target: targetScore },
-    { axis: "구조 깊이", value: aiResult.structural_depth_score, target: targetScore },
+  const radarData = scores ? [
+    { axis: "문제 정의", value: scores.problem,    target: targetScore },
+    { axis: "가설",      value: scores.hypothesis,  target: targetScore },
+    { axis: "KPI",       value: scores.kpi,         target: targetScore },
+    { axis: "기능",      value: scores.feature,     target: targetScore },
+    { axis: "구조 깊이", value: scores.structural,  target: targetScore },
   ] : [];
 
   // 버전 비교용
+  const calcS = (items?: ChecklistItem[]) => {
+    if (!items || items.length === 0) return 0;
+    return Math.round((items.filter(i => i.met).length / items.length) * 10);
+  };
   const makeRadarData = (h: HistoryEntry) => [
-    { axis: "문제 정의", value: h.result.problem_score },
-    { axis: "가설",      value: h.result.hypothesis_score },
-    { axis: "KPI",       value: h.result.kpi_score },
-    { axis: "기능",      value: h.result.feature_score },
-    { axis: "구조 깊이", value: h.result.structural_depth_score },
+    { axis: "문제 정의", value: calcS(h.result.checklist?.problem?.items) },
+    { axis: "가설",      value: calcS(h.result.checklist?.hypothesis?.items) },
+    { axis: "KPI",       value: calcS(h.result.checklist?.kpi?.items) },
+    { axis: "기능",      value: calcS(h.result.checklist?.feature?.items) },
+    { axis: "구조 깊이", value: calcS(h.result.checklist?.structural?.items) },
   ];
 
-  const scoreRows = aiResult ? [
-    { label: "문제 정의", value: aiResult.problem_score,          items: aiResult.checklist?.problem?.items },
-    { label: "가설",      value: aiResult.hypothesis_score,       items: aiResult.checklist?.hypothesis?.items },
-    { label: "KPI",       value: aiResult.kpi_score,              items: aiResult.checklist?.kpi?.items },
-    { label: "기능",      value: aiResult.feature_score,          items: aiResult.checklist?.feature?.items },
-    { label: "구조 깊이", value: aiResult.structural_depth_score, items: aiResult.checklist?.structural?.items },
+  const scoreRows = scores ? [
+    { label: "문제 정의", value: scores.problem,    items: aiResult?.checklist?.problem?.items },
+    { label: "가설",      value: scores.hypothesis,  items: aiResult?.checklist?.hypothesis?.items },
+    { label: "KPI",       value: scores.kpi,         items: aiResult?.checklist?.kpi?.items },
+    { label: "기능",      value: scores.feature,     items: aiResult?.checklist?.feature?.items },
+    { label: "구조 깊이", value: scores.structural,  items: aiResult?.checklist?.structural?.items },
   ] : [];
 
   // ── 복사 ──
   const handleCopy = () => {
-    if (!aiResult || totalScore === null) return;
+    if (!aiResult || totalScore === null || !scores) return;
     const lines = [
       `[${current?.title ?? "PRD"}] 분석 결과 (v${history.length})`,
       `총점: ${totalScore}/10`,
       ``,
-      `문제 정의: ${aiResult.problem_score} | 가설: ${aiResult.hypothesis_score} | KPI: ${aiResult.kpi_score} | 기능: ${aiResult.feature_score} | 구조 깊이: ${aiResult.structural_depth_score}`,
+      `문제 정의: ${scores.problem} | 가설: ${scores.hypothesis} | KPI: ${scores.kpi} | 기능: ${scores.feature} | 구조 깊이: ${scores.structural}`,
       ``,
       `[총평] ${aiResult.summary}`,
       `[핵심 단절] ${aiResult.critical_breakpoint}`,
@@ -443,7 +497,12 @@ export default function Home() {
         {/* 헤더 */}
         <div className="flex items-center justify-between pt-2">
           <div>
-            <h1 className="text-2xl font-medium text-slate-800">PRD Flow Checker</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-medium text-slate-800">PRD Flow Checker</h1>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-400 font-medium">
+                가설 검증형
+              </span>
+            </div>
             <p className="text-slate-500 text-xs mt-0.5">답을 알려주지 않습니다. 스스로 생각하게 만듭니다.</p>
           </div>
 
@@ -571,7 +630,7 @@ export default function Home() {
             {/* 구조화 입력 */}
             <GlassCard>
               <div className="divide-y divide-white/30">
-                {SECTION_META.map(({ key, label, placeholder, optional }) => (
+                {SECTION_META.map(({ key, label, placeholder, optional, bad, good }) => (
                   <div key={key} className="p-5">
                     <div className="flex items-center gap-2 mb-2">
                       <label className="text-sm font-semibold text-slate-600">{label}</label>
@@ -588,6 +647,18 @@ export default function Home() {
                       className="w-full bg-transparent outline-none text-sm text-slate-700 resize-none leading-relaxed"
                       placeholder={placeholder}
                     />
+                    {bad && good && (sections[key as keyof Sections] ?? "").trim() === "" && (
+                      <div className="mt-2.5 space-y-1">
+                        <div className="flex gap-1.5 items-start text-xs text-slate-400">
+                          <span className="text-red-300 shrink-0 mt-0.5">✗</span>
+                          <span>{bad}</span>
+                        </div>
+                        <div className="flex gap-1.5 items-start text-xs text-slate-500">
+                          <span className="text-green-400 shrink-0 mt-0.5">✓</span>
+                          <span>{good}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
